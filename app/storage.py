@@ -8,39 +8,62 @@ from azure.storage.blob import BlobSasPermissions, BlobServiceClient, generate_b
 SAS_EXPIRY_MINUTES = 10
 
 
-def _clean_connection_string() -> str:
-    raw = os.getenv("AZURE_STORAGE_CONNECTION_STRING", "")
-    return raw.strip().strip('"').strip("'").strip()
+def _clean(value: str) -> str:
+    return value.strip().strip('"').strip("'").strip()
+
+
+def _connection_string() -> str:
+    return _clean(os.getenv("AZURE_STORAGE_CONNECTION_STRING", ""))
+
+
+def _account_name() -> str:
+    return _clean(os.getenv("AZURE_STORAGE_ACCOUNT_NAME", ""))
+
+
+def _account_key() -> str:
+    return _clean(os.getenv("AZURE_STORAGE_ACCOUNT_KEY", ""))
 
 
 def azure_configured() -> bool:
-    conn = _clean_connection_string()
-    return conn.startswith("DefaultEndpointsProtocol=") and "AccountKey=" in conn
+    conn = _connection_string()
+    if conn.startswith("DefaultEndpointsProtocol=") and "AccountKey=" in conn:
+        return True
+    return bool(_account_name() and _account_key())
 
 
 def container_name() -> str:
-    return os.getenv("AZURE_STORAGE_CONTAINER", "temp-uploads").strip()
+    return _clean(os.getenv("AZURE_STORAGE_CONTAINER", "temp-uploads"))
 
 
 def _account_credentials() -> tuple[str, str]:
-    conn_str = _clean_connection_string()
-    if not azure_configured():
-        raise ValueError(
-            "AZURE_STORAGE_CONNECTION_STRING must be the full connection string "
-            "from Azure Portal → Storage account → Access keys → Connection string"
-        )
-
-    client = BlobServiceClient.from_connection_string(conn_str)
-    cred = client.credential
-    account_key = getattr(cred, "account_key", None)
-    if not client.account_name or not account_key:
+    conn = _connection_string()
+    if conn:
+        client = BlobServiceClient.from_connection_string(conn)
+        cred = client.credential
+        account_key = getattr(cred, "account_key", None)
+        if client.account_name and account_key:
+            return client.account_name, account_key
         raise ValueError("Connection string is missing AccountName or AccountKey")
 
-    return client.account_name, account_key
+    name, key = _account_name(), _account_key()
+    if name and key:
+        return name, key
+
+    raise ValueError(
+        "Set AZURE_STORAGE_CONNECTION_STRING or both "
+        "AZURE_STORAGE_ACCOUNT_NAME and AZURE_STORAGE_ACCOUNT_KEY in Vercel"
+    )
 
 
 def _client() -> BlobServiceClient:
-    return BlobServiceClient.from_connection_string(_clean_connection_string())
+    conn = _connection_string()
+    if conn:
+        return BlobServiceClient.from_connection_string(conn)
+    name, key = _account_credentials()
+    return BlobServiceClient(
+        account_url=f"https://{name}.blob.core.windows.net",
+        credential=key,
+    )
 
 
 def create_upload_url(filename: str) -> tuple[str, str]:
