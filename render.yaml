@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: md-creator
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/health
+    envVars:
+      - key: MAX_FILE_SIZE_MB
+        value: 25
