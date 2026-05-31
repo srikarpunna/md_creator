@@ -4,7 +4,6 @@ from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
 from markitdown import MarkItDown, StreamInfo
 from pydantic import BaseModel
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -41,8 +40,6 @@ class NoStoreMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(NoStoreMiddleware)
 
-PUBLIC_DIR = Path(__file__).parent.parent / "public"
-
 _converter: MarkItDown | None = None
 
 
@@ -61,21 +58,6 @@ class ConvertResponse(BaseModel):
 class FormatsResponse(BaseModel):
     extensions: list[str]
     max_size_mb: int
-
-
-@app.get("/")
-async def index():
-    return FileResponse(PUBLIC_DIR / "index.html")
-
-
-@app.get("/style.css")
-async def stylesheet():
-    return FileResponse(PUBLIC_DIR / "style.css", media_type="text/css")
-
-
-@app.get("/app.js")
-async def script():
-    return FileResponse(PUBLIC_DIR / "app.js", media_type="application/javascript")
 
 
 @app.get("/api/health")
