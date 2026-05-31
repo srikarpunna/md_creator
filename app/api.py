@@ -4,6 +4,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 from markitdown import MarkItDown, StreamInfo
 from pydantic import BaseModel
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -58,6 +59,11 @@ class ConvertResponse(BaseModel):
 class FormatsResponse(BaseModel):
     extensions: list[str]
     max_size_mb: int
+
+
+@app.get("/")
+async def index():
+    return RedirectResponse("/index.html", status_code=307)
 
 
 @app.get("/api/health")
