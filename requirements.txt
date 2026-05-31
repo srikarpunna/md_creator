@@ -1,4 +1,4 @@
 fastapi>=0.115.0
 python-multipart>=0.0.12
-# Lighter set — fits Vercel serverless bundle; use requirements-docker.txt for full format support
 markitdown[pdf,docx,pptx,xlsx,xls,doc,ppt]>=0.1.6
+azure-storage-blob>=12.24.0

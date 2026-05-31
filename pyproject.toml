@@ -6,6 +6,7 @@ dependencies = [
     "fastapi>=0.115.0",
     "python-multipart>=0.0.12",
     "markitdown[pdf,docx,pptx,xlsx,xls,doc,ppt]>=0.1.6",
+    "azure-storage-blob>=12.24.0",
 ]
 
 [tool.vercel]

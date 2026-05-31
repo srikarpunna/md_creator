@@ -16,6 +16,8 @@ const sizeLimit = document.getElementById("size-limit");
 
 let currentMarkdown = "";
 let currentFilename = "output.md";
+let blobUploadEnabled = false;
+let maxSizeMb = 25;
 
 function showToast(message, isError = false) {
   toast.textContent = message;
@@ -29,11 +31,20 @@ function showSection(section) {
   resultSection.hidden = section !== "result";
 }
 
+function parseError(data, fallback) {
+  if (Array.isArray(data.detail)) {
+    return data.detail.map((d) => d.msg || d).join(", ");
+  }
+  return data.detail || fallback;
+}
+
 async function loadFormats() {
   try {
     const res = await fetch("/api/formats");
     const data = await res.json();
-    sizeLimit.textContent = `${data.max_size_mb} MB max`;
+    maxSizeMb = data.max_size_mb;
+    blobUploadEnabled = Boolean(data.blob_upload);
+    sizeLimit.textContent = `${maxSizeMb} MB max`;
     formatsList.innerHTML = data.extensions
       .map((ext) => `<span class="format-tag">${ext}</span>`)
       .join("");
@@ -76,23 +87,67 @@ fileInput.addEventListener("change", () => {
   fileInput.value = "";
 });
 
+async function convertViaBlob(file) {
+  const urlRes = await fetch(
+    `/api/upload-url?filename=${encodeURIComponent(file.name)}&size=${file.size}`
+  );
+  const urlData = await urlRes.json();
+  if (!urlRes.ok) {
+    throw new Error(parseError(urlData, "Could not start upload"));
+  }
+
+  const uploadRes = await fetch(urlData.upload_url, {
+    method: "PUT",
+    headers: {
+      "x-ms-blob-type": "BlockBlob",
+      "Content-Type": file.type || "application/octet-stream",
+    },
+    body: file,
+  });
+  if (!uploadRes.ok) {
+    throw new Error("Upload to storage failed");
+  }
+
+  const convertRes = await fetch("/api/convert-blob", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      blob_name: urlData.blob_name,
+      filename: file.name,
+      size: file.size,
+    }),
+  });
+  const convertData = await convertRes.json();
+  if (!convertRes.ok) {
+    throw new Error(parseError(convertData, "Conversion failed"));
+  }
+  return convertData;
+}
+
+async function convertViaDirect(file) {
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await fetch("/api/convert", { method: "POST", body: formData });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(parseError(data, "Conversion failed"));
+  }
+  return data;
+}
+
 async function convertFile(file) {
+  if (file.size > maxSizeMb * 1024 * 1024) {
+    showToast(`File too large. Max ${maxSizeMb} MB.`, true);
+    return;
+  }
+
   loadingFilename.textContent = file.name;
   showSection("loading");
 
-  const formData = new FormData();
-  formData.append("file", file);
-
   try {
-    const res = await fetch("/api/convert", { method: "POST", body: formData });
-    const data = await res.json();
-
-    if (!res.ok) {
-      const detail = Array.isArray(data.detail)
-        ? data.detail.map((d) => d.msg || d).join(", ")
-        : data.detail;
-      throw new Error(detail || "Conversion failed");
-    }
+    const data = blobUploadEnabled
+      ? await convertViaBlob(file)
+      : await convertViaDirect(file);
 
     currentMarkdown = data.markdown;
     currentFilename = data.filename;
